@@ -17,7 +17,6 @@ from .modules.transformer import (
     TransformerEncoder,
     TransformerEncoderLayer,
 )
-from .codebooks_patterns import DelayedPatternProvider
 
 from argparse import Namespace
 from huggingface_hub import PyTorchModelHubMixin
@@ -113,7 +112,6 @@ class VoiceCraft(
             args = Namespace(**config)
 
         self.args = copy.copy(args)
-        self.pattern = DelayedPatternProvider(n_q=self.args.n_codebooks)
         if not getattr(self.args, "special_first", False):
             self.args.special_first = 0
         if not getattr(self.args, "n_special", False):
@@ -334,7 +332,6 @@ class VoiceCraft(
         assert y_out.shape == y_input.shape, f"y_out.shape: {y_out.shape}, y_input.shape: {y_input.shape}" # [B S D]
         
         logits = torch.stack([self.predict_layer[i](y_out) for i in range(self.args.n_codebooks)], dim=1) # [B K S card]
-        # take out the mask token (using mask_position and new_y_lens) and revert (using function provided by self.pattern)
         assert logits.shape[1] == self.args.n_codebooks and logits.shape[3] == self.n_audio_tokens[0], logits.shape
 
         targets = targets.permute(1,0,2) # [K B T]
