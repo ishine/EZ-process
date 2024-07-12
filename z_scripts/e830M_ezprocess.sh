@@ -42,12 +42,12 @@ torchrun --nnodes=1 --rdzv-backend=c10d --rdzv-endpoint=localhost:41977 --nproc_
 --nhead 16 \
 --num_decoder_layers 16 \
 --max_num_tokens 100000 \
---gradient_accumulation_steps 150 \
+--gradient_accumulation_steps 100 \
 --val_max_num_tokens 6000 \
 --num_buckets 6 \
 --audio_max_length 15 \
 --audio_min_length 1 \
---prosody_max_length 2.5 \
+--prosody_max_length 3 \
 --text_max_length 400 \
 --text_min_length 2 \
 --mask_len_min 1 \
@@ -76,7 +76,7 @@ torchrun --nnodes=1 --rdzv-backend=c10d --rdzv-endpoint=localhost:41977 --nproc_
 --mask_sample_dist uniform \
 --max_mask_portion 0.9 \
 --min_gap 5 \
---train_gap 5 \
+--train_gap 10 \
 --num_workers 32 \
 --dynamic_batching 1 \
 --dataset $dataset \

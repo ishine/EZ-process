@@ -96,5 +96,7 @@ def MyParser():
     parser.add_argument('--trm_dropout', type=float, default=0.1, help='Dropout for transformer')
     parser.add_argument('--nhead', type=int, default=16, help='Number of attention heads')
     parser.add_argument('--num_decoder_layers', type=int, default=16, help='Number of decoder layers')
+    parser.add_argument('--nhead_prosody_net', type=int, default=4, help='Number of attention heads')
+    parser.add_argument('--num_prosody_net_layers', type=int, default=2, help='Number of decoder layers')
     parser.add_argument('--load_model_from', type=str, default=None, help='Path to load model from, this will be effective last, so will overwrite all previous load, including resume')
     return parser

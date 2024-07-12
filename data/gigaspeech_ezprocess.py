@@ -83,8 +83,6 @@ class dataset(torch.utils.data.Dataset):
             param = float(self.args.mask_sample_dist[len("poisson"):])
             poisson_sample = torch.poisson(torch.tensor([param]))
             n_spans = int(poisson_sample.clamp(1, self.args.max_n_spans).item())
-
-        tmp_mask_len_max = int(self.args.max_mask_portion * y_len / n_spans)
         
         starts = random.sample(range(0, y_len - self.args.mask_len_min - 2*self.args.train_gap), n_spans)
         starts = sorted(starts)
@@ -93,11 +91,13 @@ class dataset(torch.utils.data.Dataset):
             if starts[j] - starts[j - 1] < self.args.min_gap + self.args.train_gap * 2:
                 del starts[j]
         assert len(starts) > 0, f"there is no masked span left, y_len: {y_len}, sampled n_spans: {n_spans}"
-    
+        
+        tmp_mask_len_max = int(self.args.max_mask_portion * y_len / len(starts))
+        
         ends = []
         for j, start in enumerate(starts):
             if j < len(starts) - 1:
-                mask_len = random.randint(self.args.mask_len_min + 2*self.args.train_gap, min(tmp_mask_len_max, starts[j+1]-starts[j]-2))
+                mask_len = random.randint(self.args.mask_len_min + 2*self.args.train_gap, min(tmp_mask_len_max, starts[j+1]-starts[j]-self.args.min_gap+1))
             else:
                 mask_len = random.randint(self.args.mask_len_min + 2*self.args.train_gap, min(tmp_mask_len_max, y_len-starts[j]))
             ends.append(start + mask_len)
@@ -296,14 +296,28 @@ class dataset(torch.utils.data.Dataset):
                     "t_len": None
                 }
 
-
-        mask_intervals, non_mask_intervals = self.prepare_mask_intervals(y_len)
-        rearranged_y = self.rearrange(torch.LongTensor(y), torch.LongTensor(z), non_mask_intervals, mask_intervals)
-        shifted_y = self.shift(rearranged_y)
-        inserted_y, mask_position = self.insert_mask(shifted_y)
-        y, y_len = self.cat_y(inserted_y)
-        x = torch.LongTensor(x)
-        y = torch.LongTensor(y)
+        try:
+            mask_intervals, non_mask_intervals = self.prepare_mask_intervals(y_len)
+            rearranged_y = self.rearrange(torch.LongTensor(y), torch.LongTensor(z), non_mask_intervals, mask_intervals)
+            shifted_y = self.shift(rearranged_y)
+            inserted_y, mask_position = self.insert_mask(shifted_y)
+            y, y_len = self.cat_y(inserted_y)
+            x = torch.LongTensor(x)
+            y = torch.LongTensor(y)
+        except:
+            item = self.data[index]
+            pf = os.path.join(self.args.dataset_dir, self.args.phn_folder_name, item[1]+".txt")
+            logging.info(f"masking failed for {pf}")
+            return {
+                "x": None,
+                "x_len": None,
+                "y": None,
+                "y_len": None,
+                "p": None,
+                "p_len": None,
+                "t": None,
+                "t_len": None
+            }
 
         if not (y < int(self.args.audio_vocab_size) + self.args.n_special + self.args.max_n_spans).all():
             item = self.data[index]

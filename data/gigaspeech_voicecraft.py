@@ -73,8 +73,6 @@ class dataset(torch.utils.data.Dataset):
             param = float(self.args.mask_sample_dist[len("poisson"):])
             poisson_sample = torch.poisson(torch.tensor([param]))
             n_spans = int(poisson_sample.clamp(1, self.args.max_n_spans).item())
-
-        tmp_mask_len_max = int(self.args.max_mask_portion * y_len / n_spans)
         
         starts = random.sample(range(0, y_len - self.args.mask_len_min), n_spans)
         starts = sorted(starts)
@@ -83,11 +81,13 @@ class dataset(torch.utils.data.Dataset):
             if starts[j] - starts[j - 1] < self.args.min_gap:
                 del starts[j]
         assert len(starts) > 0, f"there is no masked span left, y_len: {y_len}, sampled n_spans: {n_spans}"
-    
+
+        tmp_mask_len_max = int(self.args.max_mask_portion * y_len / len(starts))
+        
         ends = []
         for j, start in enumerate(starts):
             if j < len(starts) - 1:
-                mask_len = random.randint(self.args.mask_len_min, min(tmp_mask_len_max, starts[j+1]-starts[j]-2))
+                mask_len = random.randint(self.args.mask_len_min, min(tmp_mask_len_max, starts[j+1]-starts[j]-self.args.min_gap+1))
             else:
                 mask_len = random.randint(self.args.mask_len_min, min(tmp_mask_len_max, y_len-starts[j]))
             ends.append(start + mask_len)

@@ -193,6 +193,21 @@ class EZProcess(
             norm=LayerNorm(self.args.d_model),
         )
         
+        prosody_net_layer = TransformerEncoderLayer(
+            self.args.d_model,
+            self.args.nhead_prosody_net,
+            dim_feedforward=self.args.d_model // 2,
+            dropout=self.args.trm_dropout,
+            batch_first=True,
+            norm_first=True,
+            layer_norm_cls=LayerNorm
+        )
+        self.prosody_net = TransformerEncoder(
+            prosody_net_layer,
+            num_layers=self.args.num_prosody_net_layers,
+            norm=LayerNorm(self.args.d_model),
+        )
+        
         self.predict_layer = nn.ModuleList(
             [
                 nn.Sequential(nn.Linear(self.args.d_model, self.args.audio_vocab_size//2), nn.GELU(), nn.Linear(self.args.audio_vocab_size//2, self.n_audio_tokens[k])) for k in range(self.args.n_codebooks)
@@ -234,6 +249,34 @@ class EZProcess(
         
         return y_input, y_padding_mask, y_attention_mask
 
+    def prosodynet_forward(
+            self, 
+            p_input,
+            p_lens,
+            p_attention_mask,
+            p_padding_mask,
+        ):
+            p_attn_mask = p_attention_mask
+            bsz, src_len = p_input.shape[0], p_lens.max()
+            _p_padding_mask = (
+                p_padding_mask.view(bsz, 1, 1, src_len)
+                .expand(-1, self.args.nhead_prosody_net, -1, -1)
+                .reshape(bsz * self.args.nhead_prosody_net, 1, src_len)
+            )
+            # Check shapes and resize+broadcast as necessary
+            if p_attn_mask.shape != _p_padding_mask.shape:
+                assert p_attn_mask.ndim + 1 == _p_padding_mask.ndim, f"p_attn_mask.shape: {p_attn_mask.shape}, _p_padding_mask: {_p_padding_mask.shape}"
+                p_attn_mask = p_attn_mask.unsqueeze(0).repeat(_p_padding_mask.shape[0], 1, 1)
+            p_attn_mask = p_attn_mask.logical_or(_p_padding_mask)
+
+            new_attn_mask = torch.zeros_like(p_attn_mask)
+            new_attn_mask.masked_fill_(p_attn_mask, float("-inf"))
+            p_attn_mask = new_attn_mask
+            out, _ =  self.prosody_net((p_input, None), mask=p_attn_mask)
+            out = torch.mean(out, dim=1)
+            if out.ndim == 2:
+                out = out.unsqueeze(1)
+            return out
 
     def dec_forward(
             self, 
@@ -339,10 +382,6 @@ class EZProcess(
         assert p_lens.ndim == 1, p_lens.shape
         assert t.ndim == 3, t.shape
         assert t_lens.ndim == 1, t_lens.shape
-
-        # print("x:",torch.max(x),torch.min(x))
-        # print("y:",torch.max(y),torch.min(y))
-        # print("p:",torch.max(p),torch.min(p))
         
         targets = y.clone()
         y = y.permute(1,2,0) # [B,K,T]->[K,T,B]
@@ -356,6 +395,16 @@ class EZProcess(
         p_attention_mask = torch.full((p.shape[1], p.shape[1]), 0).bool().to(p_padding_mask.device)
         p_input = self.prosody_embedding(p)
         p_input = self.prosody_positional_embedding(p_input)
+        p_input = self.prosodynet_forward(
+                    p_input,
+                    p_lens,
+                    p_attention_mask,
+                    p_padding_mask,
+                )
+        p_lens = t_lens # now the sequence len of p is 1
+        p_padding_mask = make_pad_mask(p_lens).to(p.device)
+        p_attention_mask = torch.full((p_input.shape[1], p_input.shape[1]), 0).bool().to(p_padding_mask.device) # now the sequence len of p is 1
+        
 
         t_padding_mask = make_pad_mask(t_lens).to(t.device)
         t_attention_mask = torch.full((t.shape[1], t.shape[1]), 0).bool().to(t_padding_mask.device)
