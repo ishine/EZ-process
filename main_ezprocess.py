@@ -4,8 +4,8 @@ import pickle
 import argparse
 import logging
 import torch.distributed as dist
-from config_voicecraft import MyParser
-from steps import trainer_voicecraft
+from config_ezprocess import MyParser
+from steps import trainer_ezprocess
 import time
 import os
 
@@ -50,5 +50,5 @@ if __name__ == "__main__":
     # local_rank = rank
     torch.cuda.set_device(local_rank)
     
-    my_trainer = trainer_voicecraft.Trainer(args, world_size, rank)
+    my_trainer = trainer_ezprocess.Trainer(args, world_size, rank)
     my_trainer.train()
